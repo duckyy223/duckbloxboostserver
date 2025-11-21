@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, ActivityType, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -12,7 +12,7 @@ const client = new Client({
 
 const backupData = new Map();
 
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log(`Bot conectado como ${client.user.tag}`);
 
     client.user.setPresence({
@@ -71,18 +71,33 @@ async function iniciarCaos(guild, nombreUsuario, duracion) {
     const mensaje = `${nombreUsuario.toUpperCase()} HA BOOSTEADO EL SERVIDOR`;
     const canalescreados = [];
     const rolesmodificados = [];
+    const canalesTexto = [];
 
     try {
         for (const channel of guild.channels.cache.values()) {
-            if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice) {
+            if (channel.type === ChannelType.GuildText) {
+                canalesTexto.push(channel.id);
                 try {
                     await channel.permissionOverwrites.edit(guild.id, {
                         SendMessages: false,
-                        Connect: false,
+                        ViewChannel: true
+                    });
+                    await channel.permissionOverwrites.edit(guild.members.me, {
+                        SendMessages: true,
                         ViewChannel: true
                     });
                 } catch (err) {
                     console.error(`Error bloqueando canal ${channel.name}:`, err);
+                }
+            }
+            if (channel.type === ChannelType.GuildVoice) {
+                try {
+                    await channel.permissionOverwrites.edit(guild.id, {
+                        Connect: false,
+                        ViewChannel: true
+                    });
+                } catch (err) {
+                    console.error(`Error bloqueando canal de voz ${channel.name}:`, err);
                 }
             }
         }
@@ -94,6 +109,7 @@ async function iniciarCaos(guild, nombreUsuario, duracion) {
                     type: ChannelType.GuildText
                 });
                 canalescreados.push(nuevoCanal.id);
+                canalesTexto.push(nuevoCanal.id);
             } catch (err) {
                 console.error('Error creando canal:', err);
             }
@@ -111,7 +127,7 @@ async function iniciarCaos(guild, nombreUsuario, duracion) {
         }
 
         const intervalId = setInterval(async () => {
-            for (const canalId of canalescreados) {
+            for (const canalId of canalesTexto) {
                 const canal = guild.channels.cache.get(canalId);
                 if (canal) {
                     try {
@@ -214,7 +230,10 @@ client.on('interactionCreate', async interaction => {
         );
 
         if (!hasPermission) {
-            return interaction.reply({ content: 'No tienes permisos para usar este comando.', ephemeral: true });
+            return interaction.reply({
+                content: 'No tienes permisos para usar este comando.',
+                flags: MessageFlags.Ephemeral
+            });
         }
 
         const cantidad = interaction.options.getInteger('cantidad');
@@ -222,10 +241,16 @@ client.on('interactionCreate', async interaction => {
 
         const duracion = calcularDuracion(cantidad);
 
-        await interaction.reply({ content: `Iniciando simulación de boost por ${nombre} con duración de ${duracion / 1000} segundos...`, ephemeral: true });
+        await interaction.reply({
+            content: `Iniciando simulación de boost por ${nombre} con duración de ${duracion / 1000} segundos...`,
+            flags: MessageFlags.Ephemeral
+        });
 
-        await guardarEstadoServidor(interaction.guild);
-        await iniciarCaos(interaction.guild, nombre, duracion);
+        guardarEstadoServidor(interaction.guild).then(() => {
+            iniciarCaos(interaction.guild, nombre, duracion);
+        }).catch(err => {
+            console.error('Error en simulación de boost:', err);
+        });
     }
 });
 
