@@ -11,6 +11,7 @@ const client = new Client({
 });
 
 const backupData = new Map();
+const activeChaos = new Map();
 
 client.once('clientReady', () => {
     console.log(`Bot conectado como ${client.user.tag}`);
@@ -139,10 +140,17 @@ async function iniciarCaos(guild, nombreUsuario, duracion) {
             }
         }, 2000);
 
-        setTimeout(async () => {
+        const timeoutId = setTimeout(async () => {
             clearInterval(intervalId);
+            activeChaos.delete(guild.id);
             await restaurarServidor(guild, canalescreados);
         }, duracion);
+
+        activeChaos.set(guild.id, {
+            intervalId,
+            timeoutId,
+            canalescreados
+        });
 
     } catch (error) {
         console.error('Error durante el caos:', error);
@@ -151,9 +159,15 @@ async function iniciarCaos(guild, nombreUsuario, duracion) {
 
 async function restaurarServidor(guild, canalescreados) {
     const backup = backupData.get(guild.id);
-    if (!backup) return;
+    if (!backup) {
+        console.error('No se encontró backup para el servidor');
+        return;
+    }
+
+    console.log('Iniciando restauración del servidor...');
 
     try {
+        console.log(`Borrando ${canalescreados.length} canales creados...`);
         for (const canalId of canalescreados) {
             const canal = guild.channels.cache.get(canalId);
             if (canal) {
@@ -165,6 +179,7 @@ async function restaurarServidor(guild, canalescreados) {
             }
         }
 
+        console.log(`Restaurando ${backup.roles.length} roles...`);
         for (const roleData of backup.roles) {
             const role = guild.roles.cache.get(roleData.id);
             if (role && role.editable) {
@@ -182,6 +197,7 @@ async function restaurarServidor(guild, canalescreados) {
             }
         }
 
+        console.log(`Restaurando permisos de ${backup.channels.length} canales...`);
         for (const channelData of backup.channels) {
             const channel = guild.channels.cache.get(channelData.id);
             if (channel) {
@@ -200,7 +216,8 @@ async function restaurarServidor(guild, canalescreados) {
             }
         }
 
-        console.log('Servidor restaurado correctamente');
+        backupData.delete(guild.id);
+        console.log('Servidor restaurado correctamente ✓');
     } catch (error) {
         console.error('Error durante la restauración:', error);
     }
@@ -251,6 +268,42 @@ client.on('interactionCreate', async interaction => {
         }).catch(err => {
             console.error('Error en simulación de boost:', err);
         });
+    }
+
+    if (interaction.commandName === 'stopboost') {
+        const member = interaction.member;
+        const hasPermission = member.roles.cache.some(role =>
+            role.name === 'OWNER' || role.name === 'ADMIN' || member.permissions.has(PermissionFlagsBits.Administrator)
+        );
+
+        if (!hasPermission) {
+            return interaction.reply({
+                content: 'No tienes permisos para usar este comando.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const chaos = activeChaos.get(interaction.guild.id);
+
+        if (!chaos) {
+            return interaction.reply({
+                content: 'No hay ningún caos activo en este momento.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        await interaction.reply({
+            content: 'Deteniendo el caos y restaurando el servidor...',
+            flags: MessageFlags.Ephemeral
+        });
+
+        clearInterval(chaos.intervalId);
+        clearTimeout(chaos.timeoutId);
+        activeChaos.delete(interaction.guild.id);
+
+        await restaurarServidor(interaction.guild, chaos.canalescreados);
+
+        console.log('Caos detenido manualmente mediante comando /stopboost');
     }
 });
 

@@ -16,7 +16,10 @@ const commands = [
             option.setName('nombre')
                 .setDescription('Nombre de la persona que boostea (opcional)')
                 .setRequired(false)
-        )
+        ),
+    new SlashCommandBuilder()
+        .setName('stopboost')
+        .setDescription('Detiene el caos del boost inmediatamente y restaura el servidor (solo OWNER y ADMIN)')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
