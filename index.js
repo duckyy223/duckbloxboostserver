@@ -1,5 +1,16 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, ActivityType, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot activo');
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Servidor HTTP escuchando en puerto ${PORT}`);
+});
 
 const client = new Client({
     intents: [
